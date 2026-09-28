@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Text Sentiment Detector</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #fdf6f6;
+    color: #3a0d12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 15px;
+  }
+  h1 { color: #7b1e2b; margin-bottom: 5px; }
+  p.subtitle { color: #8a4b52; margin-top: 0; margin-bottom: 25px; }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid #e3c2c6;
+    border-radius: 12px;
+    padding: 25px;
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+  }
+
+  textarea {
+    width: 100%;
+    height: 90px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #d8b3b7;
+    font-size: 1rem;
+    resize: none;
+    font-family: inherit;
+  }
+
+  button {
+    margin-top: 12px;
+    background: #7b1e2b;
+    color: white;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:hover { background: #5e161f; }
+  button:disabled { background: #b58a8f; cursor: not-allowed; }
+
+  #status { margin-top: 15px; font-size: 0.9rem; color: #8a4b52; min-height: 18px; }
+
+  #result {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+    display: none;
+  }
+  .safe { background: #e6f4ea; color: #1e6b3a; }
+  .flagged { background: #f8dede; color: #7b1e2b; }
+</style>
+</head>
+<body>
+
+  <h1>Text Sentiment Detector</h1>
+  <p class="subtitle">TensorFlow.js Toxicity Model (cloud-hosted)</p>
+
+  <div class="card">
+    <textarea id="inputText" placeholder="Type a sentence..."></textarea><br>
+    <button id="checkBtn">Analyze</button>
+    <div id="status">Loading model...</div>
+    <div id="result"></div>
+  </div>
+
+  <!-- TensorFlow.js + Toxicity model, loaded from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/toxicity@1.2.2/dist/toxicity.min.js"></script>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const checkBtn = document.getElementById('checkBtn');
+    const inputText = document.getElementById('inputText');
+
+    let model;
+    const threshold = 0.7;
+
+    // Common Indian abusive/slang words + short-form abbreviations.
+    // Word-boundary matched (case-insensitive) alongside the TFJS model.
+    const indianBadWords = [
+      'bc', 'mc', 'bkl', 'bhenchod', 'behenchod', 'behnchod',
+      'madarchod', 'madharchod', 'mc bc', 'chutiya', 'chutiye',
+      'gandu', 'gaandu', 'randi', 'harami', 'haramzada', 'kamina',
+      'kutta', 'kutte', 'saala', 'saale', 'chod', 'lund', 'lauda',
+      'bhosdike', 'bhosdi', 'suar', 'kaminey'
+    ];
+
+    function containsIndianBadWord(text) {
+      const lower = text.toLowerCase();
+      return indianBadWords.some(w => {
+        const pattern = new RegExp('\\b' + w.replace(/\s+/g, '\\s+') + '\\b', 'i');
+        return pattern.test(lower);
+      });
+    }
+
+    async function loadModel() {
+      model = await toxicity.load(threshold, []);
+      statusEl.textContent = 'Model ready. Type a sentence and click Analyze.';
+      checkBtn.disabled = false;
+    }
+    checkBtn.disabled = true;
+    loadModel();
+
+    checkBtn.addEventListener('click', async () => {
+      const text = inputText.value.trim();
+      if (!text) return;
+
+      statusEl.textContent = 'Analyzing...';
+      resultEl.style.display = 'none';
+
+      const predictions = await model.classify([text]);
+      const modelFlagged = predictions.some(p => p.results[0].match === true);
+      const slangFlagged = containsIndianBadWord(text);
+      const flagged = modelFlagged || slangFlagged;
+
+      resultEl.style.display = 'block';
+      if (flagged) {
+        resultEl.className = 'flagged';
+        resultEl.textContent = slangFlagged
+          ? '⚠ Flagged: contains abusive/slang word'
+          : '⚠ Flagged: possibly negative / toxic';
+      } else {
+        resultEl.className = 'safe';
+        resultEl.textContent = '✓ Looks positive / safe';
+      }
+      statusEl.textContent = 'Done.';
+    });
+  </script>
+
+</body>
+</html>
